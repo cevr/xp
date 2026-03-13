@@ -1,4 +1,4 @@
-import { Console, Effect } from "effect";
+import { Console, Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { Session } from "../types.js";
 import { SessionService } from "../services/Session.js";
@@ -36,6 +36,10 @@ export const startCommand = Command.make(
       Flag.withDefault("opus"),
       Flag.withDescription("Model to use for agent (default: opus)"),
     ),
+    maxRun: Flag.integer("max-run").pipe(
+      Flag.optional,
+      Flag.withDescription("Maximum wall-clock runtime in minutes"),
+    ),
   },
   ({
     name,
@@ -48,6 +52,7 @@ export const startCommand = Command.make(
     maxFailures,
     provider,
     model,
+    maxRun,
   }) =>
     Effect.gen(function* () {
       const sessionSvc = yield* SessionService;
@@ -82,6 +87,8 @@ export const startCommand = Command.make(
       // Validate provider is available
       yield* agentPlatform.ensureExecutable(provider as "claude" | "codex");
 
+      const maxWallClockMs = Option.map(maxRun, (m) => m * 60 * 1000).pipe(Option.getOrUndefined);
+
       const session = new Session({
         name,
         metric,
@@ -93,6 +100,7 @@ export const startCommand = Command.make(
         benchmarkCmd: benchmark,
         maxIterations,
         maxFailures,
+        maxWallClockMs,
         projectRoot,
         segment: 1,
         currentIteration: 0,
@@ -105,6 +113,9 @@ export const startCommand = Command.make(
       yield* Console.log(`  benchmark: ${benchmark}`);
       yield* Console.log(`  provider: ${provider}`);
       yield* Console.log(`  max iterations: ${maxIterations}`);
+      if (maxWallClockMs !== undefined) {
+        yield* Console.log(`  max run: ${Option.getOrElse(maxRun, () => 0)}min`);
+      }
 
       yield* Console.log(`Starting daemon...`);
       const pid = yield* daemon.start(projectRoot);

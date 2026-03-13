@@ -50,7 +50,7 @@ export class DaemonService extends ServiceMap.Service<
         const logFd = openSync(paths.daemonLog, "a");
 
         // Spawn detached xp _loop process
-        const selfPath = process.argv[1] ?? "xp";
+        const selfPath = process.execPath;
         const proc = Bun.spawn([selfPath, "_loop", "--project-root", projectRoot], {
           stdout: logFd,
           stderr: logFd,

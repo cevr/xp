@@ -1,4 +1,11 @@
-import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+  appendFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, Layer, ServiceMap } from "effect";
@@ -98,7 +105,13 @@ export class LoopService extends ServiceMap.Service<
             if (!existsSync(paths.setupJson) && state.iteration === 0) {
               yield* appendLifecycle(log, projectRoot, "setup_discover");
               const setupPrompt = buildSetupPrompt(projectRoot, worktreePath, session.benchmarkCmd);
-              yield* agent.invoke(session.provider, setupPrompt, worktreePath);
+              const setupResult = yield* agent.invoke(session.provider, setupPrompt, worktreePath);
+              if (setupResult.stderr.trim()) {
+                appendFileSync(
+                  paths.daemonLog,
+                  `[${now()}] setup agent stderr:\n${setupResult.stderr}\n`,
+                );
+              }
             } else if (existsSync(paths.setupJson)) {
               yield* appendLifecycle(log, projectRoot, "setup_replay");
             }
@@ -212,6 +225,12 @@ export class LoopService extends ServiceMap.Service<
 
               const agentResult = yield* agent.invoke(session.provider, prompt, worktreePath);
 
+              // Log agent stderr for debugging
+              if (agentResult.stderr.trim()) {
+                const logLine = `[${now()}] iter ${state.iteration + 1} agent stderr:\n${agentResult.stderr}\n`;
+                appendFileSync(paths.daemonLog, logLine);
+              }
+
               // Check if agent made changes
               const isWorktreeClean = yield* git.isClean(worktreePath);
               const nextIteration = state.iteration + 1;
@@ -304,6 +323,8 @@ export class LoopService extends ServiceMap.Service<
                       segment: session.segment,
                       iteration: nextIteration,
                       status: "kept",
+                      value: metricValue,
+                      metrics: benchResult.metrics,
                     }),
                   );
                   yield* sessionSvc.update(projectRoot, {
@@ -322,6 +343,8 @@ export class LoopService extends ServiceMap.Service<
                       segment: session.segment,
                       iteration: nextIteration,
                       status: "discarded",
+                      value: metricValue,
+                      metrics: benchResult.metrics,
                     }),
                   );
                   yield* sessionSvc.update(projectRoot, {

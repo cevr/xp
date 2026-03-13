@@ -35,7 +35,6 @@
   "scripts": {
     "dev": "bun run src/main.ts",
     "build": "bun run scripts/build.ts",
-    "link": "bun run build && bun run scripts/link.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

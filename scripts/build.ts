@@ -1,7 +1,8 @@
 // @effect-diagnostics effect/nodeBuiltinImport:off
-import { mkdirSync, readFileSync } from "fs";
+import { mkdirSync, readFileSync, lstatSync, unlinkSync, symlinkSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import * as os from "node:os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,3 +44,18 @@ if (!buildResult.success) {
 }
 
 console.log(`Binary built: ${join(binDir, "xp")}`);
+
+const home = process.env["HOME"] ?? os.homedir();
+const bunBin = join(home, ".bun", "bin", "xp");
+try {
+  try {
+    lstatSync(bunBin);
+    unlinkSync(bunBin);
+  } catch {
+    // doesn't exist
+  }
+  symlinkSync(join(binDir, "xp"), bunBin);
+  console.log(`Symlinked to: ${bunBin}`);
+} catch (e) {
+  console.log(`Could not symlink to ${bunBin}: ${e}`);
+}

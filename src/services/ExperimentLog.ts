@@ -51,9 +51,12 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
             const updated = new ResultEvent({
               ...r,
               status: event.status,
+              // Merge benchmark values from decision into result
+              ...(event.value !== undefined ? { value: event.value } : {}),
+              ...(event.metrics !== undefined ? { metrics: event.metrics } : {}),
             });
             results[idx] = updated;
-            if (event.status === "kept" && r.value !== undefined) {
+            if (event.status === "kept" && updated.value !== undefined) {
               best = updated;
             }
           }

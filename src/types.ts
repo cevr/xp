@@ -102,6 +102,8 @@ export class DecisionEvent extends Schema.Class<DecisionEvent>("DecisionEvent")(
     segment: Schema.Number,
     iteration: Schema.Number,
     status: Schema.Literals(["kept", "discarded", "failed"]),
+    value: Schema.optional(Schema.Number),
+    metrics: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   }),
 ) {}
 
@@ -155,6 +157,7 @@ export class AgentResult extends Schema.Class<AgentResult>("AgentResult")(
   Schema.Struct({
     exitCode: Schema.Number,
     output: Schema.String,
+    stderr: Schema.String,
     durationMs: Schema.Number,
   }),
 ) {}

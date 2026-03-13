@@ -1,0 +1,67 @@
+{
+  "name": "@cvr/xp",
+  "version": "0.0.1",
+  "description": "Autonomous experiment daemon — LLM-driven optimization of any measurable metric",
+  "keywords": [
+    "ai",
+    "autonomous",
+    "benchmark",
+    "cli",
+    "codex",
+    "claude",
+    "effect",
+    "experiment",
+    "optimization"
+  ],
+  "homepage": "https://github.com/cevr/xp",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cevr/xp"
+  },
+  "bin": {
+    "xp": "./bin/xp"
+  },
+  "files": [
+    "bin",
+    "src",
+    "scripts",
+    "tsconfig.json"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun run scripts/build.ts",
+    "link": "bun run build && bun run scripts/link.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "test": "bun test",
+    "gate": "concurrently -n type,lint,fmt,test,build -c blue,yellow,magenta,green,cyan \"bun run typecheck\" \"bun run lint\" \"bun run fmt:check\" \"bun run test\" \"bun run build\"",
+    "version": "changeset version",
+    "release": "changeset publish",
+    "prepack": "bun run build",
+    "prepare": "effect-language-service patch && lefthook install"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0-beta.29",
+    "effect": "4.0.0-beta.29"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
+    "@effect/language-service": "^0.79.0",
+    "@types/bun": "^1.3.10",
+    "concurrently": "^9.2.1",
+    "effect-bun-test": "^0.2.1",
+    "lefthook": "^2.1.2",
+    "oxfmt": "^0.36.0",
+    "oxlint": "^1.51.0",
+    "typescript": "^5.9.3"
+  }
+}

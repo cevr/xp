@@ -8,11 +8,14 @@ const parseMetrics = (stdout: string): Record<string, number> => {
   const metrics: Record<string, number> = {};
   for (const line of stdout.split("\n")) {
     const match = METRIC_RE.exec(line.trim());
-    if (match) {
-      const name = match[1]!;
-      const value = Number(match[2]!);
-      if (!Number.isNaN(value)) {
-        metrics[name] = value;
+    if (match !== null) {
+      const name = match[1];
+      const rawValue = match[2];
+      if (name !== undefined && rawValue !== undefined) {
+        const value = Number(rawValue);
+        if (!Number.isNaN(value)) {
+          metrics[name] = value;
+        }
       }
     }
   }
@@ -67,9 +70,8 @@ export class RunnerService extends ServiceMap.Service<
 
       if (timeoutMs !== undefined) {
         return execute.pipe(
-          Effect.timeout(timeoutMs),
-          Effect.flatten,
-          Effect.catchTag("TimeoutException", () =>
+          Effect.timeout(`${timeoutMs} millis`),
+          Effect.catchTag("TimeoutError", () =>
             Effect.fail(
               new XpError({
                 message: `Benchmark timed out after ${timeoutMs}ms`,

@@ -16,9 +16,7 @@ export const startCommand = Command.make(
     direction: Flag.choice("direction", ["min", "max"]).pipe(
       Flag.withDescription("Optimization direction"),
     ),
-    benchmark: Flag.string("benchmark").pipe(
-      Flag.withDescription("Benchmark command to run"),
-    ),
+    benchmark: Flag.string("benchmark").pipe(Flag.withDescription("Benchmark command to run")),
     objective: Flag.string("objective").pipe(
       Flag.withDescription("Optimization objective description"),
     ),

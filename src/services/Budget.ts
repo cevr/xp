@@ -17,14 +17,17 @@ export class BudgetService extends ServiceMap.Service<
       Effect.sync(() => {
         // Max iterations
         if (state.iteration >= session.maxIterations) {
-          return { canContinue: false, reason: `Max iterations reached (${session.maxIterations})` };
+          return {
+            canContinue: false,
+            reason: `Max iterations reached (${session.maxIterations})`,
+          };
         }
 
         // Max consecutive failures
         const recentResults = state.results.filter((r) => r.kind === "trial");
         let consecutiveFailures = 0;
         for (let i = recentResults.length - 1; i >= 0; i--) {
-          if (recentResults[i]!.status === "failed") {
+          if (recentResults[i]?.status === "failed") {
             consecutiveFailures++;
           } else {
             break;

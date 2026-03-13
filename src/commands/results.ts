@@ -11,10 +11,7 @@ export const resultsCommand = Command.make(
       Flag.withDefault(false),
       Flag.withDescription("Output as JSON"),
     ),
-    last: Flag.integer("last").pipe(
-      Flag.optional,
-      Flag.withDescription("Show last N results"),
-    ),
+    last: Flag.integer("last").pipe(Flag.optional, Flag.withDescription("Show last N results")),
   },
   ({ json, last }) =>
     Effect.gen(function* () {

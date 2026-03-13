@@ -1,15 +1,8 @@
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { Effect, Layer, ServiceMap } from "effect";
 import { XpError, ErrorCode } from "../errors/index.js";
-import {
-  decodeExperimentEvent,
-  encodeExperimentEvent,
-  type ExperimentEvent,
-  type ExperimentState,
-  type ResultEvent,
-  type Session,
-  type SteerEvent,
-} from "../types.js";
+import { decodeExperimentEvent, encodeExperimentEvent, ResultEvent } from "../types.js";
+import type { ExperimentEvent, ExperimentState, Session, SteerEvent } from "../types.js";
 import { xpPaths } from "../paths.js";
 import { formatResultForLog } from "../prompt.js";
 
@@ -47,23 +40,21 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
         break;
       case "decision":
         iteration = Math.max(iteration, event.iteration);
-        if (
-          lastPendingResult &&
-          lastPendingResult.iteration === event.iteration
-        ) {
+        if (lastPendingResult && lastPendingResult.iteration === event.iteration) {
           hasDecisionForLastPending = true;
           // Update the result's status in our list
           const idx = results.findIndex(
             (r) => r.iteration === event.iteration && r.status === "pending",
           );
-          if (idx !== -1) {
-            const r = results[idx]!;
-            results[idx] = new (r.constructor as typeof ResultEvent)({
+          const r = idx !== -1 ? results[idx] : undefined;
+          if (r !== undefined) {
+            const updated = new ResultEvent({
               ...r,
               status: event.status,
             });
+            results[idx] = updated;
             if (event.status === "kept" && r.value !== undefined) {
-              best = results[idx]!;
+              best = updated;
             }
           }
         }
@@ -134,7 +125,9 @@ export class ExperimentLogService extends ServiceMap.Service<
   ExperimentLogService,
   {
     readonly append: (projectRoot: string, event: ExperimentEvent) => Effect.Effect<void, XpError>;
-    readonly readAll: (projectRoot: string) => Effect.Effect<ReadonlyArray<ExperimentEvent>, XpError>;
+    readonly readAll: (
+      projectRoot: string,
+    ) => Effect.Effect<ReadonlyArray<ExperimentEvent>, XpError>;
     readonly reconstructState: (projectRoot: string) => Effect.Effect<ExperimentState, XpError>;
     readonly regenerateMarkdown: (
       projectRoot: string,
@@ -166,7 +159,7 @@ export class ExperimentLogService extends ServiceMap.Service<
           return raw
             .split("\n")
             .filter((line) => line.trim().length > 0)
-            .map(decodeExperimentEvent);
+            .map((line) => decodeExperimentEvent(line));
         },
         catch: (e) =>
           new XpError({
@@ -176,7 +169,7 @@ export class ExperimentLogService extends ServiceMap.Service<
       }),
 
     reconstructState: (projectRoot) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const paths = xpPaths(projectRoot);
         if (!existsSync(paths.experimentsJsonl)) {
           return {
@@ -188,25 +181,25 @@ export class ExperimentLogService extends ServiceMap.Service<
             steers: [],
             lastPendingResult: undefined,
             hasDecisionForLastPending: true,
-          };
+          } satisfies ExperimentState;
         }
         const raw = readFileSync(paths.experimentsJsonl, "utf-8");
         const events = raw
           .split("\n")
           .filter((line) => line.trim().length > 0)
-          .map(decodeExperimentEvent);
+          .map((line) => decodeExperimentEvent(line));
         return reconstructFromEvents(events);
       }),
 
     regenerateMarkdown: (projectRoot, session) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const paths = xpPaths(projectRoot);
         if (!existsSync(paths.experimentsJsonl)) return;
         const raw = readFileSync(paths.experimentsJsonl, "utf-8");
         const events = raw
           .split("\n")
           .filter((line) => line.trim().length > 0)
-          .map(decodeExperimentEvent);
+          .map((line) => decodeExperimentEvent(line));
         const state = reconstructFromEvents(events);
         const md = generateMarkdown(session, state);
         writeFileSync(paths.experimentMd, md);

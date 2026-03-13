@@ -63,7 +63,6 @@ export class SessionService extends ServiceMap.Service<
         return updated;
       }),
 
-    exists: (projectRoot) =>
-      Effect.sync(() => existsSync(xpPaths(projectRoot).sessionJson)),
+    exists: (projectRoot) => Effect.sync(() => existsSync(xpPaths(projectRoot).sessionJson)),
   });
 }

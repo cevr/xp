@@ -25,7 +25,7 @@ export const ErrorCode = {
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
-export class XpError extends Schema.TaggedError<XpError>()("XpError", {
+export class XpError extends Schema.TaggedErrorClass<XpError>()("XpError", {
   message: Schema.String,
   code: Schema.String,
 }) {}

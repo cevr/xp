@@ -11,10 +11,7 @@ export class GitService extends ServiceMap.Service<
     readonly branchExists: (name: string) => Effect.Effect<boolean, XpError>;
     readonly addWorktree: (path: string, branch: string) => Effect.Effect<void, XpError>;
     readonly removeWorktree: (path: string) => Effect.Effect<void, XpError>;
-    readonly commitInWorktree: (
-      cwd: string,
-      message: string,
-    ) => Effect.Effect<string, XpError>;
+    readonly commitInWorktree: (cwd: string, message: string) => Effect.Effect<string, XpError>;
     readonly revertWorktree: (cwd: string) => Effect.Effect<void, XpError>;
     readonly diff: (cwd: string) => Effect.Effect<string, XpError>;
   }
@@ -87,8 +84,7 @@ export class GitService extends ServiceMap.Service<
 
       headSha: (cwd) => run(["rev-parse", "HEAD"], cwd),
 
-      isClean: (cwd) =>
-        run(["status", "--porcelain"], cwd).pipe(Effect.map((r) => r === "")),
+      isClean: (cwd) => run(["status", "--porcelain"], cwd).pipe(Effect.map((r) => r === "")),
 
       createBranch: (name, from) => {
         const args = from !== undefined ? ["branch", name, from] : ["branch", name];
@@ -101,11 +97,9 @@ export class GitService extends ServiceMap.Service<
           Effect.catchTag("XpError", () => Effect.succeed(false)),
         ),
 
-      addWorktree: (path, branch) =>
-        run(["worktree", "add", path, branch]).pipe(Effect.asVoid),
+      addWorktree: (path, branch) => run(["worktree", "add", path, branch]).pipe(Effect.asVoid),
 
-      removeWorktree: (path) =>
-        run(["worktree", "remove", path, "--force"]).pipe(Effect.asVoid),
+      removeWorktree: (path) => run(["worktree", "remove", path, "--force"]).pipe(Effect.asVoid),
 
       commitInWorktree: (cwd, message) =>
         run(["add", "-A"], cwd).pipe(

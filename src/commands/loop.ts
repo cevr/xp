@@ -6,9 +6,7 @@ import { DaemonService } from "../services/Daemon.js";
 export const loopCommand = Command.make(
   "_loop",
   {
-    projectRoot: Flag.string("project-root").pipe(
-      Flag.withDescription("Project root directory"),
-    ),
+    projectRoot: Flag.string("project-root").pipe(Flag.withDescription("Project root directory")),
   },
   ({ projectRoot }) =>
     Effect.gen(function* () {

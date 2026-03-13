@@ -34,7 +34,8 @@ export const buildExperimentPrompt = (
   if (recentTrials.length > 0) {
     lines.push(`## Recent Trials (last ${recentTrials.length})`);
     for (const trial of recentTrials) {
-      const status = trial.status === "kept" ? "KEPT" : trial.status === "failed" ? "FAILED" : "DISCARDED";
+      const status =
+        trial.status === "kept" ? "KEPT" : trial.status === "failed" ? "FAILED" : "DISCARDED";
       const value = trial.value !== undefined ? `${trial.value} ${session.unit}` : "N/A";
       lines.push(`- [${status}] iter ${trial.iteration}: ${value} — ${trial.summary}`);
     }
@@ -66,11 +67,15 @@ export const buildExperimentPrompt = (
   lines.push(`## Instructions`);
   lines.push(`You are working in: ${worktreePath}`);
   lines.push(`The original source is in: ${sourcePath} (read-only reference)`);
-  lines.push(`Your goal: make changes to improve the metric (${session.metric}, ${session.direction === "min" ? "lower is better" : "higher is better"}).`);
+  lines.push(
+    `Your goal: make changes to improve the metric (${session.metric}, ${session.direction === "min" ? "lower is better" : "higher is better"}).`,
+  );
   lines.push(`After making changes, the benchmark command will be run automatically.`);
   lines.push(`Be surgical — make one focused change per iteration.`);
   lines.push(`Do NOT modify the benchmark files.`);
-  lines.push(`Write a brief summary of what you changed as a comment at the top of your most-modified file.`);
+  lines.push(
+    `Write a brief summary of what you changed as a comment at the top of your most-modified file.`,
+  );
 
   return lines.join("\n");
 };
@@ -95,7 +100,9 @@ export const buildSetupPrompt = (
   lines.push("```json");
   lines.push(`{`);
   lines.push(`  "files": [{ "source": "<abs path>", "destination": "<abs path in worktree>" }],`);
-  lines.push(`  "symlinks": [{ "source": "<abs path>", "destination": "<abs path in worktree>" }],`);
+  lines.push(
+    `  "symlinks": [{ "source": "<abs path>", "destination": "<abs path in worktree>" }],`,
+  );
   lines.push(`  "commands": ["<shell command to run in worktree>"]`);
   lines.push(`}`);
   lines.push("```");
@@ -107,7 +114,8 @@ export const buildSetupPrompt = (
 };
 
 export const formatResultForLog = (result: ResultEvent, session: Session): string => {
-  const status = result.status === "kept" ? "KEPT" : result.status === "failed" ? "FAILED" : "DISCARDED";
+  const status =
+    result.status === "kept" ? "KEPT" : result.status === "failed" ? "FAILED" : "DISCARDED";
   const value = result.value !== undefined ? `${result.value} ${session.unit}` : "N/A";
   return `[${status}] iter ${result.iteration} (${result.kind}): ${value} — ${result.summary}`;
 };

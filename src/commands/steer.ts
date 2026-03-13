@@ -7,9 +7,7 @@ import { xpPaths } from "../paths.js";
 export const steerCommand = Command.make(
   "steer",
   {
-    guidance: Argument.string("guidance").pipe(
-      Argument.withDescription("Guidance for the agent"),
-    ),
+    guidance: Argument.string("guidance").pipe(Argument.withDescription("Guidance for the agent")),
   },
   ({ guidance }) =>
     Effect.gen(function* () {

@@ -10,7 +10,7 @@ import {
   ResultEvent,
   SteerEvent,
 } from "../types.js";
-import type { ExperimentState, Session } from "../types.js";
+import type { ExperimentState } from "../types.js";
 import { xpPaths } from "../paths.js";
 import { buildExperimentPrompt, buildSetupPrompt } from "../prompt.js";
 import { shouldKeep } from "../scoring.js";
@@ -97,11 +97,7 @@ export class LoopService extends ServiceMap.Service<
             // Setup discovery if new session with no setup.json
             if (!existsSync(paths.setupJson) && state.iteration === 0) {
               yield* appendLifecycle(log, projectRoot, "setup_discover");
-              const setupPrompt = buildSetupPrompt(
-                projectRoot,
-                worktreePath,
-                session.benchmarkCmd,
-              );
+              const setupPrompt = buildSetupPrompt(projectRoot, worktreePath, session.benchmarkCmd);
               yield* agent.invoke(session.provider, setupPrompt, worktreePath);
             } else if (existsSync(paths.setupJson)) {
               yield* appendLifecycle(log, projectRoot, "setup_replay");
@@ -183,12 +179,7 @@ export class LoopService extends ServiceMap.Service<
             while (true) {
               const budgetCheck = yield* budget.check(session, state);
               if (!budgetCheck.canContinue) {
-                yield* appendLifecycle(
-                  log,
-                  projectRoot,
-                  "budget_exhausted",
-                  budgetCheck.reason,
-                );
+                yield* appendLifecycle(log, projectRoot, "budget_exhausted", budgetCheck.reason);
                 yield* log.regenerateMarkdown(projectRoot, session);
                 break;
               }
@@ -265,19 +256,17 @@ export class LoopService extends ServiceMap.Service<
               );
 
               // Run benchmark
-              const benchResult = yield* runner
-                .run(session.benchmarkCmd, worktreePath)
-                .pipe(
-                  Effect.catchTag("XpError", (e) =>
-                    Effect.succeed({
-                      exitCode: 1,
-                      stdout: "",
-                      stderr: e.message,
-                      durationMs: 0,
-                      metrics: {} as Record<string, number>,
-                    }),
-                  ),
-                );
+              const benchResult = yield* runner.run(session.benchmarkCmd, worktreePath).pipe(
+                Effect.catchTag("XpError", (e) =>
+                  Effect.succeed({
+                    exitCode: 1,
+                    stdout: "",
+                    stderr: e.message,
+                    durationMs: 0,
+                    metrics: {} as Record<string, number>,
+                  }),
+                ),
+              );
 
               const bestValue = state.best?.value;
 
@@ -410,7 +399,12 @@ const reconcile = (
     const worktreePath = paths.worktree;
 
     if (!existsSync(worktreePath)) {
-      yield* appendLifecycle(log, projectRoot, "recovery", "Worktree missing during reconciliation");
+      yield* appendLifecycle(
+        log,
+        projectRoot,
+        "recovery",
+        "Worktree missing during reconciliation",
+      );
       return;
     }
 

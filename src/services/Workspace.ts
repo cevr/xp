@@ -58,8 +58,7 @@ export class WorkspaceService extends ServiceMap.Service<
             }
           }),
 
-        exists: (projectRoot) =>
-          Effect.sync(() => existsSync(xpPaths(projectRoot).worktree)),
+        exists: (projectRoot) => Effect.sync(() => existsSync(xpPaths(projectRoot).worktree)),
 
         path: (projectRoot) => xpPaths(projectRoot).worktree,
       };

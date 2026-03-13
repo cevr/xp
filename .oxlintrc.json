@@ -27,7 +27,14 @@
       }
     ]
   },
-  "ignorePatterns": ["**/bin/**", "**/dist/**", "**/node_modules/**", "**/scripts/**", "**/*.d.ts"],
+  "ignorePatterns": [
+    "**/bin/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/scripts/**",
+    "**/fixture/**",
+    "**/*.d.ts"
+  ],
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/tests/**"],

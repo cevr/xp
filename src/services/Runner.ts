@@ -37,8 +37,7 @@ export class RunnerService extends ServiceMap.Service<
       const execute = Effect.tryPromise({
         try: async () => {
           const start = Date.now();
-          const args = cmd.split(/\s+/);
-          const proc = Bun.spawn(args, {
+          const proc = Bun.spawn(["sh", "-c", cmd], {
             stdout: "pipe",
             stderr: "pipe",
             cwd,

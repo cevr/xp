@@ -30,6 +30,7 @@ const emptyState: ExperimentState = {
   steers: [],
   lastPendingResult: undefined,
   hasDecisionForLastPending: true,
+  lastPendingCommit: undefined,
 };
 
 describe("buildExperimentPrompt", () => {

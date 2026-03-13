@@ -42,9 +42,9 @@ export const buildExperimentPrompt = (
     lines.push("");
   }
 
-  const deadEnds = state.results.filter(
-    (r) => r.kind === "trial" && (r.status === "discarded" || r.status === "failed"),
-  );
+  const deadEnds = state.results
+    .filter((r) => r.kind === "trial" && (r.status === "discarded" || r.status === "failed"))
+    .slice(-10);
   if (deadEnds.length > 0) {
     lines.push(`## Dead Ends — Do NOT Retry These Approaches`);
     for (const de of deadEnds) {
@@ -73,9 +73,6 @@ export const buildExperimentPrompt = (
   lines.push(`After making changes, the benchmark command will be run automatically.`);
   lines.push(`Be surgical — make one focused change per iteration.`);
   lines.push(`Do NOT modify the benchmark files.`);
-  lines.push(
-    `Write a brief summary of what you changed as a comment at the top of your most-modified file.`,
-  );
 
   return lines.join("\n");
 };

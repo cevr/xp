@@ -55,6 +55,7 @@ export class DaemonService extends ServiceMap.Service<
           stdout: logFd,
           stderr: logFd,
           cwd: projectRoot,
+          env: { ...process.env, XP_INTERNAL: "1" },
         });
 
         closeSync(logFd);
@@ -86,8 +87,25 @@ export class DaemonService extends ServiceMap.Service<
           });
         }
 
+        // Send SIGTERM and wait for process to die
         process.kill(pid, "SIGTERM");
-        unlinkSync(paths.daemonPid);
+
+        // Poll for up to 5s
+        const deadline = Date.now() + 5000;
+        while (isProcessRunning(pid) && Date.now() < deadline) {
+          yield* Effect.sleep("200 millis");
+        }
+
+        // If still running, escalate to SIGKILL
+        if (isProcessRunning(pid)) {
+          process.kill(pid, "SIGKILL");
+          yield* Effect.sleep("500 millis");
+        }
+
+        // Now safe to remove pid file
+        if (existsSync(paths.daemonPid)) {
+          unlinkSync(paths.daemonPid);
+        }
       }),
 
     status: (projectRoot) =>

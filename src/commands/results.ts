@@ -24,6 +24,7 @@ export const resultsCommand = Command.make(
       const results = last._tag === "Some" ? state.results.slice(-last.value) : state.results;
 
       if (json) {
+        // @effect-diagnostics-next-line effect/preferSchemaOverJson:off
         yield* Console.log(JSON.stringify(results, null, 2));
       } else {
         if (results.length === 0) {

@@ -2,24 +2,39 @@ import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs
 import { Effect, Layer, ServiceMap } from "effect";
 import { XpError, ErrorCode } from "../errors/index.js";
 import { decodeExperimentEvent, encodeExperimentEvent, ResultEvent } from "../types.js";
-import type { ExperimentEvent, ExperimentState, Session, SteerEvent } from "../types.js";
+import type { Direction, ExperimentEvent, ExperimentState, Session, SteerEvent } from "../types.js";
 import { xpPaths } from "../paths.js";
 import { formatResultForLog } from "../prompt.js";
+import { shouldKeep } from "../scoring.js";
+
+const isBetterBest = (
+  candidate: ResultEvent,
+  current: ResultEvent | undefined,
+  direction: Direction | undefined,
+): boolean => {
+  if (!current || current.value === undefined) return true;
+  if (candidate.value === undefined) return false;
+  if (!direction) return true; // no config yet, accept any
+  return shouldKeep(direction, candidate.value, current.value);
+};
 
 const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): ExperimentState => {
   let segment = 0;
   let iteration = 0;
+  let direction: Direction | undefined;
   let baseline: ResultEvent | undefined;
   let best: ResultEvent | undefined;
   const results: Array<ResultEvent> = [];
   const steers: Array<SteerEvent> = [];
   let lastPendingResult: ResultEvent | undefined;
   let hasDecisionForLastPending = true;
+  let lastPendingCommit: string | undefined;
 
   for (const event of events) {
     switch (event._tag) {
       case "config":
         segment = event.segment;
+        direction = event.direction;
         break;
       case "result":
         iteration = Math.max(iteration, event.iteration);
@@ -29,7 +44,7 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
           if (!best) best = event;
         }
         if (event.status === "kept" && event.value !== undefined) {
-          if (!best || (best.value !== undefined && event.value !== undefined)) {
+          if (isBetterBest(event, best, direction)) {
             best = event;
           }
         }
@@ -57,9 +72,16 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
             });
             results[idx] = updated;
             if (event.status === "kept" && updated.value !== undefined) {
-              best = updated;
+              if (isBetterBest(updated, best, direction)) {
+                best = updated;
+              }
             }
           }
+        }
+        break;
+      case "committed":
+        if (lastPendingResult && lastPendingResult.iteration === event.iteration) {
+          lastPendingCommit = event.commit;
         }
         break;
       case "steer":
@@ -79,6 +101,7 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
     steers,
     lastPendingResult,
     hasDecisionForLastPending,
+    lastPendingCommit,
   };
 };
 
@@ -172,26 +195,40 @@ export class ExperimentLogService extends ServiceMap.Service<
       }),
 
     reconstructState: (projectRoot) =>
-      Effect.sync(() => {
-        const paths = xpPaths(projectRoot);
-        if (!existsSync(paths.experimentsJsonl)) {
-          return {
-            segment: 0,
-            iteration: 0,
-            baseline: undefined,
-            best: undefined,
-            results: [],
-            steers: [],
-            lastPendingResult: undefined,
-            hasDecisionForLastPending: true,
-          } satisfies ExperimentState;
-        }
-        const raw = readFileSync(paths.experimentsJsonl, "utf-8");
-        const events = raw
-          .split("\n")
-          .filter((line) => line.trim().length > 0)
-          .map((line) => decodeExperimentEvent(line));
-        return reconstructFromEvents(events);
+      Effect.try({
+        try: () => {
+          const paths = xpPaths(projectRoot);
+          if (!existsSync(paths.experimentsJsonl)) {
+            return {
+              segment: 0,
+              iteration: 0,
+              baseline: undefined,
+              best: undefined,
+              results: [],
+              steers: [],
+              lastPendingResult: undefined,
+              hasDecisionForLastPending: true,
+              lastPendingCommit: undefined,
+            } satisfies ExperimentState;
+          }
+          const raw = readFileSync(paths.experimentsJsonl, "utf-8");
+          const events: Array<ExperimentEvent> = [];
+          for (const line of raw.split("\n")) {
+            if (line.trim().length === 0) continue;
+            try {
+              events.push(decodeExperimentEvent(line));
+            } catch {
+              // Skip malformed lines — log corruption should not crash the daemon
+              console.warn(`[xp] skipping malformed JSONL line: ${line.slice(0, 80)}`);
+            }
+          }
+          return reconstructFromEvents(events);
+        },
+        catch: (e) =>
+          new XpError({
+            message: `Failed to reconstruct state: ${e}`,
+            code: ErrorCode.READ_FAILED,
+          }),
       }),
 
     regenerateMarkdown: (projectRoot, session) =>

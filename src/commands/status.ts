@@ -24,6 +24,7 @@ export const statusCommand = Command.make(
 
       if (!exists) {
         if (json) {
+          // @effect-diagnostics-next-line effect/preferSchemaOverJson:off
           yield* Console.log(JSON.stringify({ running: false, session: null }));
         } else {
           yield* Console.log("No experiment session found.");
@@ -52,6 +53,7 @@ export const statusCommand = Command.make(
       };
 
       if (json) {
+        // @effect-diagnostics-next-line effect/preferSchemaOverJson:off
         yield* Console.log(JSON.stringify(info, null, 2));
       } else {
         const statusIcon = daemonStatus.running ? "running" : "stopped";

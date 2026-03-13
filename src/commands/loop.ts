@@ -1,5 +1,6 @@
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
+import { XpError, ErrorCode } from "../errors/index.js";
 import { LoopService } from "../services/Loop.js";
 import { DaemonService } from "../services/Daemon.js";
 
@@ -10,27 +11,33 @@ export const loopCommand = Command.make(
   },
   ({ projectRoot }) =>
     Effect.gen(function* () {
+      // Guard: only callable by the daemon
+      if (process.env["XP_INTERNAL"] !== "1") {
+        return yield* new XpError({
+          message: "This command is for internal use only",
+          code: ErrorCode.AGENT_FAILED,
+        });
+      }
+
       const loop = yield* LoopService;
       const daemon = yield* DaemonService;
 
       // Write own pid
       yield* daemon.writePid(projectRoot, process.pid);
 
-      // Set up SIGTERM handler
-      const controller = new AbortController();
+      // Create a deferred that resolves on SIGTERM
+      const shutdown = yield* Deferred.make<void>();
       process.on("SIGTERM", () => {
         console.log("Received SIGTERM, shutting down...");
-        controller.abort();
+        Effect.runFork(Deferred.succeed(shutdown, undefined));
       });
 
-      // Run loop (will be interrupted by SIGTERM via fiber interrupt)
-      yield* loop.run(projectRoot).pipe(
-        Effect.onInterrupt(() =>
-          Effect.gen(function* () {
-            yield* daemon.cleanPid(projectRoot);
-          }),
-        ),
-      );
+      // Fork the loop, then race against SIGTERM
+      const fiber = yield* Effect.forkChild(loop.run(projectRoot));
+      yield* Effect.race(Fiber.join(fiber), Deferred.await(shutdown));
+
+      // Interrupt the loop fiber if still running (SIGTERM case)
+      yield* Fiber.interrupt(fiber);
 
       yield* daemon.cleanPid(projectRoot);
     }),

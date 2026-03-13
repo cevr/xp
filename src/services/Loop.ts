@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { Effect, Layer, ServiceMap } from "effect";
 import { XpError, ErrorCode } from "../errors/index.js";
 import {
+  CommittedEvent,
   ConfigEvent,
   DecisionEvent,
   LifecycleEventEntry,
@@ -31,15 +32,24 @@ import { WorkspaceService } from "./Workspace.js";
 
 const now = () => new Date().toISOString();
 
-const hashFiles = (files: ReadonlyArray<string>): string => {
-  const hash = createHash("sha256");
-  for (const file of files) {
-    if (existsSync(file)) {
-      hash.update(readFileSync(file));
-    }
-  }
-  return hash.digest("hex");
-};
+const hashFiles = Effect.fn("hashFiles")(function* (files: ReadonlyArray<string>) {
+  return yield* Effect.try({
+    try: () => {
+      const hash = createHash("sha256");
+      for (const file of files) {
+        if (existsSync(file)) {
+          hash.update(readFileSync(file));
+        }
+      }
+      return hash.digest("hex");
+    },
+    catch: (e) =>
+      new XpError({
+        message: `Failed to hash benchmark files: ${e}`,
+        code: ErrorCode.BENCHMARK_FAILED,
+      }),
+  });
+});
 
 const parseBenchmarkFiles = (cmd: string, cwd: string): ReadonlyArray<string> => {
   // Extract file paths from the benchmark command
@@ -105,7 +115,12 @@ export class LoopService extends ServiceMap.Service<
             if (!existsSync(paths.setupJson) && state.iteration === 0) {
               yield* appendLifecycle(log, projectRoot, "setup_discover");
               const setupPrompt = buildSetupPrompt(projectRoot, worktreePath, session.benchmarkCmd);
-              const setupResult = yield* agent.invoke(session.provider, setupPrompt, worktreePath);
+              const setupResult = yield* agent.invoke(
+                session.provider,
+                setupPrompt,
+                worktreePath,
+                session.model,
+              );
               if (setupResult.stderr.trim()) {
                 appendFileSync(
                   paths.daemonLog,
@@ -118,7 +133,7 @@ export class LoopService extends ServiceMap.Service<
 
             // Freeze benchmark digest
             const benchmarkFiles = parseBenchmarkFiles(session.benchmarkCmd, worktreePath);
-            const benchmarkDigest = hashFiles(benchmarkFiles);
+            const benchmarkDigest = yield* hashFiles(benchmarkFiles);
             writeFileSync(paths.benchmarkDigest, benchmarkDigest);
             yield* appendLifecycle(log, projectRoot, "benchmark_frozen");
 
@@ -186,6 +201,11 @@ export class LoopService extends ServiceMap.Service<
               state = yield* log.reconstructState(projectRoot);
             }
 
+            // Compute benchmark timeout: 5x baseline duration, minimum 30s
+            const benchmarkTimeoutMs = state.baseline
+              ? Math.max(state.baseline.durationMs * 5, 30_000)
+              : undefined;
+
             yield* log.regenerateMarkdown(projectRoot, session);
 
             // --- LOOP ---
@@ -198,13 +218,13 @@ export class LoopService extends ServiceMap.Service<
               }
 
               // Consume steers
-              const steers = consumeSteers(paths.steerDir, session.segment, state.iteration);
+              const steers = yield* consumeSteers(paths.steerDir, session.segment, state.iteration);
               for (const steer of steers) {
                 yield* log.append(projectRoot, steer);
               }
 
               // Verify benchmark integrity
-              const currentDigest = hashFiles(benchmarkFiles);
+              const currentDigest = yield* hashFiles(benchmarkFiles);
               const storedDigest = readFileSync(paths.benchmarkDigest, "utf-8");
               if (currentDigest !== storedDigest) {
                 return yield* new XpError({
@@ -223,7 +243,12 @@ export class LoopService extends ServiceMap.Service<
                 allSteers,
               );
 
-              const agentResult = yield* agent.invoke(session.provider, prompt, worktreePath);
+              const agentResult = yield* agent.invoke(
+                session.provider,
+                prompt,
+                worktreePath,
+                session.model,
+              );
 
               // Log agent stderr for debugging
               if (agentResult.stderr.trim()) {
@@ -231,9 +256,32 @@ export class LoopService extends ServiceMap.Service<
                 appendFileSync(paths.daemonLog, logLine);
               }
 
+              const nextIteration = state.iteration + 1;
+
+              // Agent failed — revert and log
+              if (agentResult.exitCode !== 0) {
+                yield* git.revertWorktree(worktreePath);
+                yield* log.append(
+                  projectRoot,
+                  new ResultEvent({
+                    _tag: "result",
+                    timestamp: now(),
+                    segment: session.segment,
+                    iteration: nextIteration,
+                    kind: "trial",
+                    status: "failed",
+                    durationMs: agentResult.durationMs,
+                    summary: `Agent exited with code ${agentResult.exitCode}`,
+                  }),
+                );
+                yield* sessionSvc.update(projectRoot, { currentIteration: nextIteration });
+                state = yield* log.reconstructState(projectRoot);
+                yield* log.regenerateMarkdown(projectRoot, session);
+                continue;
+              }
+
               // Check if agent made changes
               const isWorktreeClean = yield* git.isClean(worktreePath);
-              const nextIteration = state.iteration + 1;
 
               if (isWorktreeClean) {
                 yield* log.append(
@@ -275,17 +323,19 @@ export class LoopService extends ServiceMap.Service<
               );
 
               // Run benchmark
-              const benchResult = yield* runner.run(session.benchmarkCmd, worktreePath).pipe(
-                Effect.catchTag("XpError", (e) =>
-                  Effect.succeed({
-                    exitCode: 1,
-                    stdout: "",
-                    stderr: e.message,
-                    durationMs: 0,
-                    metrics: {} as Record<string, number>,
-                  }),
-                ),
-              );
+              const benchResult = yield* runner
+                .run(session.benchmarkCmd, worktreePath, benchmarkTimeoutMs)
+                .pipe(
+                  Effect.catchTag("XpError", (e) =>
+                    Effect.succeed({
+                      exitCode: 1,
+                      stdout: "",
+                      stderr: e.message,
+                      durationMs: 0,
+                      metrics: {} as Record<string, number>,
+                    }),
+                  ),
+                );
 
               const bestValue = state.best?.value;
 
@@ -314,6 +364,17 @@ export class LoopService extends ServiceMap.Service<
                   const sha = yield* git.commitInWorktree(
                     worktreePath,
                     `xp(${session.name}): iter ${nextIteration} — ${session.metric}=${metricValue}`,
+                  );
+                  // Write committed event before decision — crash recovery uses this
+                  yield* log.append(
+                    projectRoot,
+                    new CommittedEvent({
+                      _tag: "committed",
+                      timestamp: now(),
+                      segment: session.segment,
+                      iteration: nextIteration,
+                      commit: sha,
+                    }),
                   );
                   yield* log.append(
                     projectRoot,
@@ -365,13 +426,13 @@ export class LoopService extends ServiceMap.Service<
   );
 }
 
-const appendLifecycle = (
+const appendLifecycle = Effect.fn("appendLifecycle")(function* (
   log: ServiceMap.Service.Shape<typeof ExperimentLogService>,
   projectRoot: string,
   event: LifecycleEventEntry["event"],
   detail?: string,
-): Effect.Effect<void, XpError> =>
-  log.append(
+) {
+  yield* log.append(
     projectRoot,
     new LifecycleEventEntry({
       _tag: "lifecycle",
@@ -380,62 +441,68 @@ const appendLifecycle = (
       detail,
     }),
   );
+});
 
-const consumeSteers = (
+const consumeSteers = Effect.fn("consumeSteers")(function* (
   steerDir: string,
   segment: number,
   iteration: number,
-): ReadonlyArray<SteerEvent> => {
-  if (!existsSync(steerDir)) return [];
-  const files = readdirSync(steerDir)
-    .filter((f) => f.endsWith(".txt"))
-    .sort();
-  const steers: Array<SteerEvent> = [];
-  for (const file of files) {
-    const content = readFileSync(join(steerDir, file), "utf-8").trim();
-    if (content) {
-      steers.push(
-        new SteerEvent({
-          _tag: "steer",
-          timestamp: now(),
-          segment,
-          iteration,
-          guidance: content,
-        }),
-      );
-    }
-    unlinkSync(join(steerDir, file));
-  }
-  return steers;
-};
+) {
+  return yield* Effect.try({
+    try: () => {
+      if (!existsSync(steerDir)) return [] as ReadonlyArray<SteerEvent>;
+      const files = readdirSync(steerDir)
+        .filter((f) => f.endsWith(".txt"))
+        .sort();
+      const steers: Array<SteerEvent> = [];
+      for (const file of files) {
+        const content = readFileSync(join(steerDir, file), "utf-8").trim();
+        if (content) {
+          steers.push(
+            new SteerEvent({
+              _tag: "steer",
+              timestamp: now(),
+              segment,
+              iteration,
+              guidance: content,
+            }),
+          );
+        }
+        unlinkSync(join(steerDir, file));
+      }
+      return steers as ReadonlyArray<SteerEvent>;
+    },
+    catch: (e) =>
+      new XpError({
+        message: `Failed to consume steers: ${e}`,
+        code: ErrorCode.READ_FAILED,
+      }),
+  });
+});
 
-const reconcile = (
+const reconcile = Effect.fn("reconcile")(function* (
   log: ServiceMap.Service.Shape<typeof ExperimentLogService>,
   git: ServiceMap.Service.Shape<typeof GitService>,
   projectRoot: string,
   state: ExperimentState,
-): Effect.Effect<void, XpError> =>
-  Effect.gen(function* () {
-    if (!state.lastPendingResult || state.hasDecisionForLastPending) return;
+) {
+  if (!state.lastPendingResult || state.hasDecisionForLastPending) return;
 
-    const paths = xpPaths(projectRoot);
-    const worktreePath = paths.worktree;
+  const paths = xpPaths(projectRoot);
+  const worktreePath = paths.worktree;
 
-    if (!existsSync(worktreePath)) {
-      yield* appendLifecycle(
-        log,
-        projectRoot,
-        "recovery",
-        "Worktree missing during reconciliation",
-      );
-      return;
-    }
+  if (!existsSync(worktreePath)) {
+    yield* appendLifecycle(log, projectRoot, "recovery", "Worktree missing during reconciliation");
+    return;
+  }
 
+  const pendingCommit = state.lastPendingCommit;
+
+  if (pendingCommit) {
+    // A committed event exists — the commit was made before crash
     const headSha = yield* git.headSha(worktreePath);
-    const pendingCommit = state.lastPendingResult.commit;
-
-    if (pendingCommit && headSha === pendingCommit) {
-      // HEAD matches pending commit — finalize as kept
+    if (headSha === pendingCommit) {
+      // HEAD matches committed SHA — finalize as kept
       yield* log.append(
         projectRoot,
         new DecisionEvent({
@@ -447,7 +514,7 @@ const reconcile = (
         }),
       );
     } else {
-      // HEAD doesn't match — finalize as discarded, revert
+      // HEAD diverged — finalize as discarded, revert
       yield* git.revertWorktree(worktreePath);
       yield* log.append(
         projectRoot,
@@ -460,6 +527,20 @@ const reconcile = (
         }),
       );
     }
+  } else {
+    // No committed event — crash happened before commit, discard
+    yield* git.revertWorktree(worktreePath);
+    yield* log.append(
+      projectRoot,
+      new DecisionEvent({
+        _tag: "decision",
+        timestamp: now(),
+        segment: state.segment,
+        iteration: state.lastPendingResult.iteration,
+        status: "discarded",
+      }),
+    );
+  }
 
-    yield* appendLifecycle(log, projectRoot, "recovery", "Reconciled pending result");
-  });
+  yield* appendLifecycle(log, projectRoot, "recovery", "Reconciled pending result");
+});

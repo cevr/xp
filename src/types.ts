@@ -32,6 +32,7 @@ export class Session extends Schema.Class<Session>("Session")(
     unit: Schema.String,
     direction: Direction,
     provider: Provider,
+    model: Schema.optional(Schema.String),
     objective: Schema.String,
     benchmarkCmd: Schema.String,
     maxIterations: Schema.Number,
@@ -53,8 +54,7 @@ export const encodeSession = Schema.encodeSync(SessionJson);
 // --- JSONL Events ---
 
 export class ConfigEvent extends Schema.Class<ConfigEvent>("ConfigEvent")(
-  Schema.Struct({
-    _tag: Schema.Literal("config"),
+  Schema.TaggedStruct("config", {
     timestamp: Schema.String,
     segment: Schema.Number,
     name: Schema.String,
@@ -77,8 +77,7 @@ export class BenchmarkFailure extends Schema.Class<BenchmarkFailure>("BenchmarkF
 ) {}
 
 export class ResultEvent extends Schema.Class<ResultEvent>("ResultEvent")(
-  Schema.Struct({
-    _tag: Schema.Literal("result"),
+  Schema.TaggedStruct("result", {
     timestamp: Schema.String,
     segment: Schema.Number,
     iteration: Schema.Number,
@@ -96,8 +95,7 @@ export class ResultEvent extends Schema.Class<ResultEvent>("ResultEvent")(
 ) {}
 
 export class DecisionEvent extends Schema.Class<DecisionEvent>("DecisionEvent")(
-  Schema.Struct({
-    _tag: Schema.Literal("decision"),
+  Schema.TaggedStruct("decision", {
     timestamp: Schema.String,
     segment: Schema.Number,
     iteration: Schema.Number,
@@ -108,8 +106,7 @@ export class DecisionEvent extends Schema.Class<DecisionEvent>("DecisionEvent")(
 ) {}
 
 export class SteerEvent extends Schema.Class<SteerEvent>("SteerEvent")(
-  Schema.Struct({
-    _tag: Schema.Literal("steer"),
+  Schema.TaggedStruct("steer", {
     timestamp: Schema.String,
     segment: Schema.Number,
     iteration: Schema.Number,
@@ -117,9 +114,17 @@ export class SteerEvent extends Schema.Class<SteerEvent>("SteerEvent")(
   }),
 ) {}
 
+export class CommittedEvent extends Schema.Class<CommittedEvent>("CommittedEvent")(
+  Schema.TaggedStruct("committed", {
+    timestamp: Schema.String,
+    segment: Schema.Number,
+    iteration: Schema.Number,
+    commit: Schema.String,
+  }),
+) {}
+
 export class LifecycleEventEntry extends Schema.Class<LifecycleEventEntry>("LifecycleEventEntry")(
-  Schema.Struct({
-    _tag: Schema.Literal("lifecycle"),
+  Schema.TaggedStruct("lifecycle", {
     timestamp: Schema.String,
     event: LifecycleEvent,
     detail: Schema.optional(Schema.String),
@@ -130,6 +135,7 @@ export const ExperimentEvent = Schema.Union([
   ConfigEvent,
   ResultEvent,
   DecisionEvent,
+  CommittedEvent,
   SteerEvent,
   LifecycleEventEntry,
 ]);
@@ -201,4 +207,6 @@ export interface ExperimentState {
   readonly steers: ReadonlyArray<SteerEvent>;
   readonly lastPendingResult: ResultEvent | undefined;
   readonly hasDecisionForLastPending: boolean;
+  /** Commit SHA from a committed event for the last pending result (crash recovery) */
+  readonly lastPendingCommit: string | undefined;
 }

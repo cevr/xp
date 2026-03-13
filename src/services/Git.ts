@@ -108,12 +108,12 @@ export class GitService extends ServiceMap.Service<
         ),
 
       revertWorktree: (cwd) =>
-        run(["checkout", "--", "."], cwd).pipe(
+        run(["reset", "--hard", "HEAD"], cwd).pipe(
           Effect.flatMap(() => run(["clean", "-fd"], cwd)),
           Effect.asVoid,
         ),
 
-      diff: (cwd) => run(["diff"], cwd),
+      diff: (cwd) => run(["diff", "HEAD"], cwd),
     };
   });
 

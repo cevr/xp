@@ -27,5 +27,26 @@ export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 export class XpError extends Schema.TaggedErrorClass<XpError>()("XpError", {
   message: Schema.String,
-  code: Schema.String,
+  code: Schema.Literals([
+    ErrorCode.SESSION_NOT_FOUND,
+    ErrorCode.SESSION_EXISTS,
+    ErrorCode.DAEMON_ALREADY_RUNNING,
+    ErrorCode.DAEMON_NOT_RUNNING,
+    ErrorCode.DAEMON_SPAWN_FAILED,
+    ErrorCode.GIT_DIRTY,
+    ErrorCode.GIT_FAILED,
+    ErrorCode.WORKTREE_FAILED,
+    ErrorCode.BENCHMARK_FAILED,
+    ErrorCode.BENCHMARK_TIMEOUT,
+    ErrorCode.METRIC_PARSE_FAILED,
+    ErrorCode.BENCHMARK_TAMPERED,
+    ErrorCode.AGENT_FAILED,
+    ErrorCode.AGENT_TIMEOUT,
+    ErrorCode.BUDGET_EXHAUSTED,
+    ErrorCode.WRITE_FAILED,
+    ErrorCode.READ_FAILED,
+    ErrorCode.LOCK_FAILED,
+    ErrorCode.LOCK_STALE,
+    ErrorCode.RECONCILIATION_FAILED,
+  ]),
 }) {}

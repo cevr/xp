@@ -32,8 +32,23 @@ export const startCommand = Command.make(
       Flag.withDefault("claude" as const),
       Flag.withDescription("Agent provider"),
     ),
+    model: Flag.string("model").pipe(
+      Flag.withDefault("opus"),
+      Flag.withDescription("Model to use for agent (default: opus)"),
+    ),
   },
-  ({ name, metric, unit, direction, benchmark, objective, maxIterations, maxFailures, provider }) =>
+  ({
+    name,
+    metric,
+    unit,
+    direction,
+    benchmark,
+    objective,
+    maxIterations,
+    maxFailures,
+    provider,
+    model,
+  }) =>
     Effect.gen(function* () {
       const sessionSvc = yield* SessionService;
       const daemon = yield* DaemonService;
@@ -73,6 +88,7 @@ export const startCommand = Command.make(
         unit,
         direction: direction as "min" | "max",
         provider: provider as "claude" | "codex",
+        model,
         objective,
         benchmarkCmd: benchmark,
         maxIterations,
@@ -90,7 +106,9 @@ export const startCommand = Command.make(
       yield* Console.log(`  provider: ${provider}`);
       yield* Console.log(`  max iterations: ${maxIterations}`);
 
+      yield* Console.log(`Starting daemon...`);
       const pid = yield* daemon.start(projectRoot);
       yield* Console.log(`Daemon started (pid ${pid})`);
+      yield* Console.log(`Tip: run 'xp logs -f' to watch progress`);
     }),
 ).pipe(Command.withDescription("Initialize and start an experiment"));

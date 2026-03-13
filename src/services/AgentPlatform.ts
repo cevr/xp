@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Duration, Effect, Layer, ServiceMap } from "effect";
 import { XpError, ErrorCode } from "../errors/index.js";
 import { AgentResult } from "../types.js";
 import type { Provider } from "../types.js";
+
+const DEFAULT_AGENT_TIMEOUT = Duration.minutes(10);
 
 const resolveExecutable = (name: string): string => {
   const path = Bun.which(name);
@@ -27,15 +29,17 @@ export class AgentPlatformService extends ServiceMap.Service<
       provider: Provider,
       prompt: string,
       cwd: string,
+      model?: string,
     ) => Effect.Effect<AgentResult, XpError>;
     readonly ensureExecutable: (provider: Provider) => Effect.Effect<string, XpError>;
   }
 >()("@cvr/xp/services/AgentPlatform/AgentPlatformService") {
   static layer: Layer.Layer<AgentPlatformService> = Layer.succeed(AgentPlatformService, {
-    invoke: (provider, prompt, cwd) =>
+    invoke: (provider, prompt, cwd, model) =>
       Effect.tryPromise({
         try: async () => {
           const start = Date.now();
+          const agentModel = model ?? "opus";
 
           const args =
             provider === "claude"
@@ -45,7 +49,9 @@ export class AgentPlatformService extends ServiceMap.Service<
                   prompt,
                   "--dangerously-skip-permissions",
                   "--model",
-                  "opus",
+                  agentModel,
+                  "--max-turns",
+                  "20",
                   "--no-session-persistence",
                   "--output-format",
                   "text",
@@ -88,14 +94,24 @@ export class AgentPlatformService extends ServiceMap.Service<
             message: `${provider} invocation failed: ${e instanceof Error ? e.message : String(e)}`,
             code: ErrorCode.AGENT_FAILED,
           }),
-      }),
+      }).pipe(
+        Effect.timeout(DEFAULT_AGENT_TIMEOUT),
+        Effect.catchTag("TimeoutError", () =>
+          Effect.fail(
+            new XpError({
+              message: `Agent timed out after ${Duration.toMillis(DEFAULT_AGENT_TIMEOUT)}ms`,
+              code: ErrorCode.AGENT_TIMEOUT,
+            }),
+          ),
+        ),
+      ),
 
     ensureExecutable: (provider) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const name = provider === "claude" ? "claude" : "codex";
         const resolved = resolveExecutable(name);
         if (resolved === name && !Bun.which(name)) {
-          throw new XpError({
+          return yield* new XpError({
             message: `${name} not found in PATH. Install it first.`,
             code: ErrorCode.AGENT_FAILED,
           });

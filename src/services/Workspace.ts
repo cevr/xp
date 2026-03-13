@@ -28,6 +28,9 @@ export class WorkspaceService extends ServiceMap.Service<
             const paths = xpPaths(session.projectRoot);
             const branchName = `xp/${session.name}`;
 
+            // Prune stale worktree records (e.g. from killed daemons)
+            yield* git.pruneWorktrees(session.projectRoot);
+
             // Create branch if needed
             const exists = yield* git.branchExists(branchName);
             if (!exists) {

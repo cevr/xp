@@ -14,6 +14,7 @@ export class GitService extends ServiceMap.Service<
     readonly commitInWorktree: (cwd: string, message: string) => Effect.Effect<string, XpError>;
     readonly revertWorktree: (cwd: string) => Effect.Effect<void, XpError>;
     readonly diff: (cwd: string) => Effect.Effect<string, XpError>;
+    readonly pruneWorktrees: (cwd?: string) => Effect.Effect<void, XpError>;
   }
 >()("@cvr/xp/services/Git/GitService") {
   static layer: Layer.Layer<GitService> = Layer.sync(GitService, () => {
@@ -114,6 +115,8 @@ export class GitService extends ServiceMap.Service<
         ),
 
       diff: (cwd) => run(["diff", "HEAD"], cwd),
+
+      pruneWorktrees: (cwd) => run(["worktree", "prune"], cwd).pipe(Effect.asVoid),
     };
   });
 
@@ -129,6 +132,7 @@ export class GitService extends ServiceMap.Service<
       commitInWorktree: () => Effect.succeed("abc123"),
       revertWorktree: () => Effect.void,
       diff: () => Effect.succeed(""),
+      pruneWorktrees: () => Effect.void,
       ...impl,
     });
 }

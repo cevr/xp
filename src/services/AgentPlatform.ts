@@ -29,17 +29,15 @@ export class AgentPlatformService extends ServiceMap.Service<
       provider: Provider,
       prompt: string,
       cwd: string,
-      model?: string,
     ) => Effect.Effect<AgentResult, XpError>;
     readonly ensureExecutable: (provider: Provider) => Effect.Effect<string, XpError>;
   }
 >()("@cvr/xp/services/AgentPlatform/AgentPlatformService") {
   static layer: Layer.Layer<AgentPlatformService> = Layer.succeed(AgentPlatformService, {
-    invoke: (provider, prompt, cwd, model) =>
+    invoke: (provider, prompt, cwd) =>
       Effect.tryPromise({
         try: async () => {
           const start = Date.now();
-          const agentModel = model ?? "opus";
 
           const args =
             provider === "claude"
@@ -49,7 +47,7 @@ export class AgentPlatformService extends ServiceMap.Service<
                   prompt,
                   "--dangerously-skip-permissions",
                   "--model",
-                  agentModel,
+                  "opus",
                   "--max-turns",
                   "20",
                   "--no-session-persistence",

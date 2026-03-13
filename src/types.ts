@@ -28,11 +28,10 @@ export type LifecycleEvent = typeof LifecycleEvent.Type;
 export class Session extends Schema.Class<Session>("Session")(
   Schema.Struct({
     name: Schema.String,
-    metric: Schema.String,
+    metric: Schema.optional(Schema.String),
     unit: Schema.String,
     direction: Direction,
     provider: Provider,
-    model: Schema.optional(Schema.String),
     objective: Schema.String,
     benchmarkCmd: Schema.String,
     maxIterations: Schema.Number,

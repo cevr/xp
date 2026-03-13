@@ -59,7 +59,7 @@ export const statusCommand = Command.make(
         const statusIcon = daemonStatus.running ? "running" : "stopped";
         yield* Console.log(`Experiment: ${session.name} [${statusIcon}]`);
         if (daemonStatus.pid) yield* Console.log(`  pid: ${daemonStatus.pid}`);
-        yield* Console.log(`  metric: ${session.metric} (${session.direction})`);
+        yield* Console.log(`  metric: ${session.metric ?? "auto-detect"} (${session.direction})`);
         yield* Console.log(`  iteration: ${state.iteration}/${session.maxIterations}`);
         if (state.baseline?.value !== undefined) {
           yield* Console.log(`  baseline: ${state.baseline.value} ${session.unit}`);

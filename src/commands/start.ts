@@ -1,5 +1,6 @@
+import { basename } from "node:path";
 import { Console, Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/unstable/cli";
 import { Session } from "../types.js";
 import { SessionService } from "../services/Session.js";
 import { DaemonService } from "../services/Daemon.js";
@@ -10,8 +11,14 @@ import { mkdirSync } from "node:fs";
 export const startCommand = Command.make(
   "start",
   {
-    name: Argument.string("name").pipe(Argument.withDescription("Experiment name")),
-    metric: Flag.string("metric").pipe(Flag.withDescription("Metric name to optimize")),
+    name: Flag.string("name").pipe(
+      Flag.optional,
+      Flag.withDescription("Experiment name (default: directory name)"),
+    ),
+    metric: Flag.string("metric").pipe(
+      Flag.optional,
+      Flag.withDescription("Metric name to optimize (auto-detected if single metric)"),
+    ),
     unit: Flag.string("unit").pipe(Flag.withDefault(""), Flag.withDescription("Metric unit")),
     direction: Flag.choice("direction", ["min", "max"]).pipe(
       Flag.withDescription("Optimization direction"),
@@ -32,18 +39,14 @@ export const startCommand = Command.make(
       Flag.withDefault("claude" as const),
       Flag.withDescription("Agent provider"),
     ),
-    model: Flag.string("model").pipe(
-      Flag.withDefault("opus"),
-      Flag.withDescription("Model to use for agent (default: opus)"),
-    ),
-    maxRun: Flag.integer("max-run").pipe(
+    maxMinutes: Flag.integer("max-minutes").pipe(
       Flag.optional,
       Flag.withDescription("Maximum wall-clock runtime in minutes"),
     ),
   },
   ({
-    name,
-    metric,
+    name: nameOpt,
+    metric: metricOpt,
     unit,
     direction,
     benchmark,
@@ -51,8 +54,7 @@ export const startCommand = Command.make(
     maxIterations,
     maxFailures,
     provider,
-    model,
-    maxRun,
+    maxMinutes,
   }) =>
     Effect.gen(function* () {
       const sessionSvc = yield* SessionService;
@@ -64,6 +66,8 @@ export const startCommand = Command.make(
 
       // Ensure .xp directory exists
       mkdirSync(paths.xpDir, { recursive: true });
+
+      const name = Option.getOrElse(nameOpt, () => basename(projectRoot));
 
       // Check if resuming
       const exists = yield* sessionSvc.exists(projectRoot);
@@ -87,7 +91,11 @@ export const startCommand = Command.make(
       // Validate provider is available
       yield* agentPlatform.ensureExecutable(provider as "claude" | "codex");
 
-      const maxWallClockMs = Option.map(maxRun, (m) => m * 60 * 1000).pipe(Option.getOrUndefined);
+      const maxWallClockMs = Option.map(maxMinutes, (m) => m * 60 * 1000).pipe(
+        Option.getOrUndefined,
+      );
+
+      const metric = Option.getOrUndefined(metricOpt);
 
       const session = new Session({
         name,
@@ -95,7 +103,6 @@ export const startCommand = Command.make(
         unit,
         direction: direction as "min" | "max",
         provider: provider as "claude" | "codex",
-        model,
         objective,
         benchmarkCmd: benchmark,
         maxIterations,
@@ -109,12 +116,16 @@ export const startCommand = Command.make(
 
       yield* sessionSvc.init(session);
       yield* Console.log(`Experiment "${name}" initialized.`);
-      yield* Console.log(`  metric: ${metric} (${direction})`);
+      if (metric) {
+        yield* Console.log(`  metric: ${metric} (${direction})`);
+      } else {
+        yield* Console.log(`  metric: auto-detect (${direction})`);
+      }
       yield* Console.log(`  benchmark: ${benchmark}`);
       yield* Console.log(`  provider: ${provider}`);
       yield* Console.log(`  max iterations: ${maxIterations}`);
       if (maxWallClockMs !== undefined) {
-        yield* Console.log(`  max run: ${Option.getOrElse(maxRun, () => 0)}min`);
+        yield* Console.log(`  max minutes: ${Option.getOrElse(maxMinutes, () => 0)}`);
       }
 
       yield* Console.log(`Starting daemon...`);

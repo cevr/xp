@@ -1,6 +1,6 @@
 {
   "name": "@cvr/xp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Autonomous experiment daemon — LLM-driven optimization of any measurable metric",
   "keywords": [
     "ai",

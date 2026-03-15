@@ -40,14 +40,12 @@ export class BudgetService extends ServiceMap.Service<
           };
         }
 
-        // Wall clock
-        if (session.maxWallClockMs !== undefined) {
-          const startedAt = new Date(session.createdAt).getTime();
-          const elapsed = Date.now() - startedAt;
-          if (elapsed >= session.maxWallClockMs) {
+        // Deadline
+        if (session.deadline !== undefined) {
+          if (Date.now() >= new Date(session.deadline).getTime()) {
             return {
               canContinue: false,
-              reason: `Wall clock limit exceeded (${Math.round(elapsed / 1000 / 60)}min)`,
+              reason: `Deadline reached (${session.deadline})`,
             };
           }
         }

@@ -39,12 +39,12 @@ export const statusCommand = Command.make(
         running: daemonStatus.running,
         pid: daemonStatus.pid,
         name: session.name,
-        metric: session.metric,
         unit: session.unit,
         direction: session.direction,
         provider: session.provider,
         iteration: state.iteration,
         maxIterations: session.maxIterations,
+        deadline: session.deadline,
         bestValue: state.best?.value,
         baselineValue: state.baseline?.value,
         totalTrials: state.results.filter((r) => r.kind === "trial").length,
@@ -59,8 +59,9 @@ export const statusCommand = Command.make(
         const statusIcon = daemonStatus.running ? "running" : "stopped";
         yield* Console.log(`Experiment: ${session.name} [${statusIcon}]`);
         if (daemonStatus.pid) yield* Console.log(`  pid: ${daemonStatus.pid}`);
-        yield* Console.log(`  metric: ${session.metric ?? "auto-detect"} (${session.direction})`);
+        yield* Console.log(`  direction: ${session.direction}`);
         yield* Console.log(`  iteration: ${state.iteration}/${session.maxIterations}`);
+        if (session.deadline) yield* Console.log(`  deadline: ${session.deadline}`);
         if (state.baseline?.value !== undefined) {
           yield* Console.log(`  baseline: ${state.baseline.value} ${session.unit}`);
         }

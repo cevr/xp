@@ -1,46 +1,58 @@
 import { describe, expect, test } from "bun:test";
-import { parseMetrics } from "../../src/services/Runner.js";
+import { parseResult } from "../../src/services/Runner.js";
 
-describe("parseMetrics", () => {
-  test("parses simple METRIC lines", () => {
-    const stdout = "some output\nMETRIC latency=42.3\nmore output\nMETRIC throughput=1000\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({ latency: 42.3, throughput: 1000 });
+describe("parseResult", () => {
+  test("parses single RESULT line", () => {
+    const stdout = "some output\nRESULT 42.3\nmore output\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: 42.3, count: 1 });
   });
 
   test("handles scientific notation", () => {
-    const stdout = "METRIC value=1.5e3\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({ value: 1500 });
+    const stdout = "RESULT 1.5e3\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: 1500, count: 1 });
   });
 
   test("handles negative values", () => {
-    const stdout = "METRIC score=-5.2\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({ score: -5.2 });
+    const stdout = "RESULT -5.2\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: -5.2, count: 1 });
   });
 
-  test("ignores non-metric lines", () => {
-    const stdout = "Building...\nDone.\nMETRIC time=100\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({ time: 100 });
+  test("ignores non-RESULT lines", () => {
+    const stdout = "Building...\nDone.\nRESULT 100\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: 100, count: 1 });
   });
 
-  test("returns empty for no metrics", () => {
-    const stdout = "no metrics here\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({});
+  test("returns undefined for no RESULT", () => {
+    const stdout = "no result here\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: undefined, count: 0 });
   });
 
-  test("handles underscore in metric name", () => {
-    const stdout = "METRIC avg_latency=12.5\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({ avg_latency: 12.5 });
+  test("detects multiple RESULT lines", () => {
+    const stdout = "RESULT 42.3\nRESULT 100\n";
+    const result = parseResult(stdout);
+    expect(result.count).toBe(2);
   });
 
-  test("rejects invalid metric names", () => {
-    const stdout = "METRIC 123invalid=10\n";
-    const metrics = parseMetrics(stdout);
-    expect(metrics).toEqual({});
+  test("handles integer values", () => {
+    const stdout = "RESULT 42\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: 42, count: 1 });
+  });
+
+  test("handles positive sign", () => {
+    const stdout = "RESULT +12.5\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: 12.5, count: 1 });
+  });
+
+  test("ignores METRIC lines (old format)", () => {
+    const stdout = "METRIC latency=42.3\n";
+    const result = parseResult(stdout);
+    expect(result).toEqual({ value: undefined, count: 0 });
   });
 });

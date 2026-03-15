@@ -10,7 +10,6 @@ const TEST_ROOT = "/tmp/xp-test-session";
 const makeSession = (): Session =>
   new Session({
     name: "test",
-    metric: "latency",
     unit: "ms",
     direction: "min",
     provider: "claude",
@@ -65,7 +64,7 @@ describe("SessionService", () => {
       }),
     );
     expect(loaded.name).toBe("test");
-    expect(loaded.metric).toBe("latency");
+    expect(loaded.unit).toBe("ms");
   });
 
   test("update patches session", () => {

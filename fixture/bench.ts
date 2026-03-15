@@ -35,7 +35,7 @@ const primesMs = bench("primes", () => primes(PRIME_LIMIT));
 const stringMs = bench("string", () => buildString(STRING_SIZE));
 const totalMs = sortMs + primesMs + stringMs;
 
-console.log(`METRIC sort_ms=${sortMs.toFixed(2)}`);
-console.log(`METRIC primes_ms=${primesMs.toFixed(2)}`);
-console.log(`METRIC string_ms=${stringMs.toFixed(2)}`);
-console.log(`METRIC total_ms=${totalMs.toFixed(2)}`);
+console.log(`sort: ${sortMs.toFixed(2)} ms`);
+console.log(`primes: ${primesMs.toFixed(2)} ms`);
+console.log(`string: ${stringMs.toFixed(2)} ms`);
+console.log(`RESULT ${totalMs.toFixed(2)}`);

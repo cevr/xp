@@ -15,9 +15,21 @@ bun run build         # compile binary to bin/xp
 Required flags: `--direction`, `--benchmark`, `--objective`. Everything else optional.
 
 - `--name` defaults to `basename(cwd)`
-- `--metric` auto-detected if benchmark emits exactly 1 `METRIC` line; error if multiple without `--metric`
 - `--model` removed — hardcoded `opus` in `AgentPlatform.ts`
-- `--max-minutes` (was `--max-run`) — wall-clock budget
+- `--max-minutes` — wall-clock budget (computed as absolute deadline internally)
+- `--until` — absolute deadline as ISO date or datetime (mutually exclusive with `--max-minutes`)
+
+## Benchmark Contract
+
+Benchmark must emit exactly one `RESULT <number>` line to stdout:
+
+```
+RESULT 42.5
+```
+
+- Zero RESULT lines → error
+- Multiple RESULT lines → error (progress output belongs in stderr)
+- Regex: `^RESULT\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)$`
 
 ## Code Conventions
 
@@ -31,14 +43,14 @@ Required flags: `--direction`, `--benchmark`, `--objective`. Everything else opt
 
 ## Architecture Decisions
 
+- Single-value benchmark contract: `RESULT <number>`. One number in, one number out. No metric names, no maps, no auto-detection
 - Two-phase commit protocol: `result(pending)` → `committed(sha)` → `decision(kept|discarded|failed)`. The `committed` event is crash recovery evidence — without it, reconciliation discards
 - Benchmark integrity: files hashed at baseline, verified each iteration. Timeout = 5x baseline duration (min 30s)
 - Agent timeout: 10min default, `--max-turns 20` for claude
 - Shell execution: `sh -c` for benchmark commands (supports quotes, pipes, env vars)
 - Revert semantics: `git reset --hard HEAD && git clean -fd` (not checkout — must clear index)
 - `git diff HEAD` (not `git diff`) to capture both staged and unstaged changes
-- Metric resolution happens at baseline time in `Loop.ts`, not in `start.ts` — session stores `metric` as optional, resolved on first run, then persisted via `SessionService.update`
-- `Session.metric` is `Schema.optional` — `undefined` before baseline, always `string` after. Code post-baseline uses `as string` cast (invariant: baseline always resolves metric)
+- Time budget stored as `deadline` (absolute ISO 8601 string), not relative duration — cleaner recovery semantics after crash
 
 ## Gotchas
 
@@ -51,7 +63,6 @@ Required flags: `--direction`, `--benchmark`, `--objective`. Everything else opt
 - Tests use `bun:test` (not vitest)
 - `ExperimentState` has `lastPendingCommit` field — include in test fixtures
 - `GitService.layerTest` provides noop implementations for all git operations
-- Test `Session` fixtures can omit `metric` (optional) or provide it explicitly — both valid
 
 ## LSP
 

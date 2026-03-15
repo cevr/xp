@@ -6,7 +6,6 @@ import type { ExperimentState } from "../../src/types.js";
 const makeSession = (overrides: Partial<Session> = {}): Session =>
   new Session({
     name: "test-exp",
-    metric: "latency",
     unit: "ms",
     direction: "min",
     provider: "claude",
@@ -41,12 +40,11 @@ describe("buildExperimentPrompt", () => {
     expect(prompt).toContain("Reduce request latency");
   });
 
-  test("includes metric details", () => {
+  test("includes direction details", () => {
     const session = makeSession();
     const prompt = buildExperimentPrompt(session, emptyState, "/tmp/worktree", "/tmp/project", []);
-    expect(prompt).toContain("latency");
-    expect(prompt).toContain("ms");
     expect(prompt).toContain("minimize");
+    expect(prompt).toContain("ms");
   });
 
   test("includes paths", () => {

@@ -2,24 +2,25 @@ import { Effect, Layer, ServiceMap } from "effect";
 import { XpError, ErrorCode } from "../errors/index.js";
 import { BenchmarkResult } from "../types.js";
 
-const METRIC_RE = /^METRIC\s+([a-zA-Z_][a-zA-Z0-9_]*)=([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)$/;
+const RESULT_RE = /^RESULT\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)$/;
 
-const parseMetrics = (stdout: string): Record<string, number> => {
-  const metrics: Record<string, number> = {};
+const parseResult = (stdout: string): { value: number | undefined; count: number } => {
+  let value: number | undefined;
+  let count = 0;
   for (const line of stdout.split("\n")) {
-    const match = METRIC_RE.exec(line.trim());
+    const match = RESULT_RE.exec(line.trim());
     if (match !== null) {
-      const name = match[1];
-      const rawValue = match[2];
-      if (name !== undefined && rawValue !== undefined) {
-        const value = Number(rawValue);
-        if (!Number.isNaN(value)) {
-          metrics[name] = value;
+      const rawValue = match[1];
+      if (rawValue !== undefined) {
+        const parsed = Number(rawValue);
+        if (!Number.isNaN(parsed)) {
+          value = parsed;
+          count++;
         }
       }
     }
   }
-  return metrics;
+  return { value, count };
 };
 
 export class RunnerService extends ServiceMap.Service<
@@ -50,14 +51,14 @@ export class RunnerService extends ServiceMap.Service<
           ]);
 
           const durationMs = Date.now() - start;
-          const metrics = parseMetrics(stdout);
+          const parsed = parseResult(stdout);
 
           return new BenchmarkResult({
             stdout,
             stderr,
             exitCode,
             durationMs,
-            metrics,
+            value: parsed.value,
           });
         },
         catch: (e) =>
@@ -86,4 +87,4 @@ export class RunnerService extends ServiceMap.Service<
   });
 }
 
-export { parseMetrics };
+export { parseResult };

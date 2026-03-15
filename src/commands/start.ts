@@ -2,11 +2,26 @@ import { basename } from "node:path";
 import { Console, Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { Session } from "../types.js";
+import { XpError, ErrorCode } from "../errors/index.js";
 import { SessionService } from "../services/Session.js";
 import { DaemonService } from "../services/Daemon.js";
 import { AgentPlatformService } from "../services/AgentPlatform.js";
 import { xpPaths } from "../paths.js";
 import { mkdirSync } from "node:fs";
+
+const parseUntil = (raw: string): Date => {
+  // Try full ISO datetime first
+  const full = new Date(raw);
+  if (!Number.isNaN(full.getTime()) && raw.includes("T")) {
+    return full;
+  }
+  // Date-only → EOD local
+  const dateOnly = new Date(`${raw}T23:59:59.999`);
+  if (Number.isNaN(dateOnly.getTime())) {
+    throw new Error(`Invalid date: ${raw}`);
+  }
+  return dateOnly;
+};
 
 export const startCommand = Command.make(
   "start",
@@ -14,10 +29,6 @@ export const startCommand = Command.make(
     name: Flag.string("name").pipe(
       Flag.optional,
       Flag.withDescription("Experiment name (default: directory name)"),
-    ),
-    metric: Flag.string("metric").pipe(
-      Flag.optional,
-      Flag.withDescription("Metric name to optimize (auto-detected if single metric)"),
     ),
     unit: Flag.string("unit").pipe(Flag.withDefault(""), Flag.withDescription("Metric unit")),
     direction: Flag.choice("direction", ["min", "max"]).pipe(
@@ -43,10 +54,15 @@ export const startCommand = Command.make(
       Flag.optional,
       Flag.withDescription("Maximum wall-clock runtime in minutes"),
     ),
+    until: Flag.string("until").pipe(
+      Flag.optional,
+      Flag.withDescription(
+        "Deadline as ISO date or datetime (e.g. 2026-03-15 or 2026-03-15T14:00:00)",
+      ),
+    ),
   },
   ({
     name: nameOpt,
-    metric: metricOpt,
     unit,
     direction,
     benchmark,
@@ -55,6 +71,7 @@ export const startCommand = Command.make(
     maxFailures,
     provider,
     maxMinutes,
+    until: untilOpt,
   }) =>
     Effect.gen(function* () {
       const sessionSvc = yield* SessionService;
@@ -91,15 +108,33 @@ export const startCommand = Command.make(
       // Validate provider is available
       yield* agentPlatform.ensureExecutable(provider as "claude" | "codex");
 
-      const maxWallClockMs = Option.map(maxMinutes, (m) => m * 60 * 1000).pipe(
-        Option.getOrUndefined,
-      );
+      // Validate mutual exclusivity of --max-minutes and --until
+      const hasMaxMinutes = maxMinutes._tag === "Some";
+      const hasUntil = untilOpt._tag === "Some";
 
-      const metric = Option.getOrUndefined(metricOpt);
+      if (hasMaxMinutes && hasUntil) {
+        yield* Console.error("Error: --max-minutes and --until are mutually exclusive");
+        return;
+      }
+
+      // Normalize to deadline
+      let deadline: string | undefined;
+      if (hasMaxMinutes) {
+        deadline = new Date(Date.now() + maxMinutes.value * 60_000).toISOString();
+      } else if (hasUntil) {
+        const parsed = yield* Effect.try({
+          try: () => parseUntil(untilOpt.value),
+          catch: (e) =>
+            new XpError({
+              message: `Invalid --until value: ${e instanceof Error ? e.message : String(e)}`,
+              code: ErrorCode.SESSION_NOT_FOUND,
+            }),
+        });
+        deadline = parsed.toISOString();
+      }
 
       const session = new Session({
         name,
-        metric,
         unit,
         direction: direction as "min" | "max",
         provider: provider as "claude" | "codex",
@@ -107,7 +142,7 @@ export const startCommand = Command.make(
         benchmarkCmd: benchmark,
         maxIterations,
         maxFailures,
-        maxWallClockMs,
+        deadline,
         projectRoot,
         segment: 1,
         currentIteration: 0,
@@ -116,16 +151,12 @@ export const startCommand = Command.make(
 
       yield* sessionSvc.init(session);
       yield* Console.log(`Experiment "${name}" initialized.`);
-      if (metric) {
-        yield* Console.log(`  metric: ${metric} (${direction})`);
-      } else {
-        yield* Console.log(`  metric: auto-detect (${direction})`);
-      }
+      yield* Console.log(`  direction: ${direction}`);
       yield* Console.log(`  benchmark: ${benchmark}`);
       yield* Console.log(`  provider: ${provider}`);
       yield* Console.log(`  max iterations: ${maxIterations}`);
-      if (maxWallClockMs !== undefined) {
-        yield* Console.log(`  max minutes: ${Option.getOrElse(maxMinutes, () => 0)}`);
+      if (deadline !== undefined) {
+        yield* Console.log(`  deadline: ${deadline}`);
       }
 
       yield* Console.log(`Starting daemon...`);

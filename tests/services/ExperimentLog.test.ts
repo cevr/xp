@@ -66,7 +66,6 @@ describe("ExperimentLogService", () => {
       timestamp: new Date().toISOString(),
       segment: 1,
       name: "test",
-      metric: "latency",
       unit: "ms",
       direction: "min",
       provider: "claude",

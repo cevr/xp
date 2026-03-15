@@ -99,7 +99,7 @@ export class LoopService extends ServiceMap.Service<
 
             // --- STARTUP ---
             yield* appendLifecycle(log, projectRoot, "started");
-            let session = yield* sessionSvc.load(projectRoot);
+            const session = yield* sessionSvc.load(projectRoot);
 
             // Reconstruct state from JSONL
             let state = yield* log.reconstructState(projectRoot);
@@ -144,41 +144,14 @@ export class LoopService extends ServiceMap.Service<
                 });
               }
 
-              // Resolve metric: use session.metric if provided, otherwise auto-detect
-              const metricNames = Object.keys(baselineResult.metrics);
-              let resolvedMetric: string;
-
-              if (session.metric) {
-                // Explicit metric — verify it exists in output
-                if (baselineResult.metrics[session.metric] === undefined) {
-                  return yield* new XpError({
-                    message: `Baseline benchmark did not emit METRIC ${session.metric}. Available: ${metricNames.join(", ")}`,
-                    code: ErrorCode.METRIC_PARSE_FAILED,
-                  });
-                }
-                resolvedMetric = session.metric;
-              } else if (metricNames.length === 0) {
+              if (baselineResult.value === undefined) {
                 return yield* new XpError({
-                  message: "Baseline benchmark did not emit any METRIC lines",
-                  code: ErrorCode.METRIC_PARSE_FAILED,
-                });
-              } else if (metricNames.length === 1) {
-                // Single metric — auto-select
-                resolvedMetric = metricNames[0] as string;
-                yield* Effect.log(`Auto-detected metric: ${resolvedMetric}`);
-              } else {
-                return yield* new XpError({
-                  message: `Multiple metrics found, specify one with --metric: ${metricNames.join(", ")}`,
-                  code: ErrorCode.METRIC_PARSE_FAILED,
+                  message: "Baseline benchmark did not emit a RESULT line",
+                  code: ErrorCode.RESULT_PARSE_FAILED,
                 });
               }
 
-              const metricValue = baselineResult.metrics[resolvedMetric] as number;
-
-              // Persist resolved metric back to session if it was auto-detected
-              if (!session.metric) {
-                session = yield* sessionSvc.update(projectRoot, { metric: resolvedMetric });
-              }
+              const baselineValue = baselineResult.value;
 
               // Log config event
               yield* log.append(
@@ -188,7 +161,6 @@ export class LoopService extends ServiceMap.Service<
                   timestamp: now(),
                   segment: session.segment,
                   name: session.name,
-                  metric: resolvedMetric,
                   unit: session.unit,
                   direction: session.direction,
                   provider: session.provider,
@@ -208,8 +180,7 @@ export class LoopService extends ServiceMap.Service<
                   iteration: 0,
                   kind: "baseline",
                   status: "kept",
-                  value: metricValue,
-                  metrics: baselineResult.metrics,
+                  value: baselineValue,
                   durationMs: baselineResult.durationMs,
                   summary: "Baseline measurement",
                   commit: sourceCommit,
@@ -217,17 +188,12 @@ export class LoopService extends ServiceMap.Service<
               );
 
               yield* sessionSvc.update(projectRoot, {
-                bestValue: metricValue,
+                bestValue: baselineValue,
                 bestCommit: sourceCommit,
               });
 
               state = yield* log.reconstructState(projectRoot);
             }
-
-            // After baseline, metric is always resolved (either from flag or auto-detected)
-            // Reload session to pick up any auto-detected metric
-            session = yield* sessionSvc.load(projectRoot);
-            const resolvedMetric = session.metric as string;
 
             // Compute benchmark timeout: 5x baseline duration, minimum 30s
             const benchmarkTimeoutMs = state.baseline
@@ -355,7 +321,7 @@ export class LoopService extends ServiceMap.Service<
                       stdout: "",
                       stderr: e.message,
                       durationMs: 0,
-                      metrics: {} as Record<string, number>,
+                      value: undefined as number | undefined,
                     }),
                   ),
                 );
@@ -376,7 +342,7 @@ export class LoopService extends ServiceMap.Service<
                   }),
                 );
               } else {
-                const metricValue = benchResult.metrics[resolvedMetric];
+                const metricValue = benchResult.value;
 
                 if (
                   metricValue !== undefined &&
@@ -386,7 +352,7 @@ export class LoopService extends ServiceMap.Service<
                   // Keep — commit
                   const sha = yield* git.commitInWorktree(
                     worktreePath,
-                    `xp(${session.name}): iter ${nextIteration} — ${resolvedMetric}=${metricValue}`,
+                    `xp(${session.name}): iter ${nextIteration} — ${metricValue}${session.unit ? " " + session.unit : ""}`,
                   );
                   // Write committed event before decision — crash recovery uses this
                   yield* log.append(
@@ -408,7 +374,6 @@ export class LoopService extends ServiceMap.Service<
                       iteration: nextIteration,
                       status: "kept",
                       value: metricValue,
-                      metrics: benchResult.metrics,
                     }),
                   );
                   yield* sessionSvc.update(projectRoot, {
@@ -428,7 +393,6 @@ export class LoopService extends ServiceMap.Service<
                       iteration: nextIteration,
                       status: "discarded",
                       value: metricValue,
-                      metrics: benchResult.metrics,
                     }),
                   );
                   yield* sessionSvc.update(projectRoot, {

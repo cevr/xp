@@ -12,9 +12,7 @@ export class SessionService extends ServiceMap.Service<
     readonly load: (projectRoot: string) => Effect.Effect<Session, XpError>;
     readonly update: (
       projectRoot: string,
-      patch: Partial<
-        Pick<Session, "currentIteration" | "bestValue" | "bestCommit" | "segment" | "metric">
-      >,
+      patch: Partial<Pick<Session, "currentIteration" | "bestValue" | "bestCommit" | "segment">>,
     ) => Effect.Effect<Session, XpError>;
     readonly exists: (projectRoot: string) => Effect.Effect<boolean>;
   }

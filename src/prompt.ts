@@ -14,10 +14,9 @@ export const buildExperimentPrompt = (
   lines.push(`## Objective`);
   lines.push(session.objective);
   lines.push("");
-  lines.push(`## Metric`);
-  lines.push(`- **Name**: ${session.metric}`);
-  lines.push(`- **Unit**: ${session.unit}`);
-  lines.push(`- **Direction**: ${session.direction === "min" ? "minimize" : "maximize"}`);
+  lines.push(
+    `## Goal: ${session.direction === "min" ? "minimize" : "maximize"} (${session.unit || "unitless"})`,
+  );
   lines.push("");
 
   if (state.best) {
@@ -68,7 +67,7 @@ export const buildExperimentPrompt = (
   lines.push(`You are working in: ${worktreePath}`);
   lines.push(`The original source is in: ${sourcePath} (read-only reference)`);
   lines.push(
-    `Your goal: make changes to improve the metric (${session.metric}, ${session.direction === "min" ? "lower is better" : "higher is better"}).`,
+    `Your goal: make changes to improve the result (${session.direction === "min" ? "lower is better" : "higher is better"}).`,
   );
   lines.push(`After making changes, the benchmark command will be run automatically.`);
   lines.push(`Be surgical — make one focused change per iteration.`);

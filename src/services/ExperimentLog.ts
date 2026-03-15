@@ -68,7 +68,6 @@ const reconstructFromEvents = (events: ReadonlyArray<ExperimentEvent>): Experime
               status: event.status,
               // Merge benchmark values from decision into result
               ...(event.value !== undefined ? { value: event.value } : {}),
-              ...(event.metrics !== undefined ? { metrics: event.metrics } : {}),
             });
             results[idx] = updated;
             if (event.status === "kept" && updated.value !== undefined) {
@@ -110,7 +109,9 @@ const generateMarkdown = (session: Session, state: ExperimentState): string => {
   lines.push(`# Experiment: ${session.name}`);
   lines.push("");
   lines.push(`**Objective**: ${session.objective}`);
-  lines.push(`**Metric**: ${session.metric} (${session.unit}, ${session.direction})`);
+  lines.push(
+    `**Goal**: ${session.direction === "min" ? "minimize" : "maximize"} (${session.unit || "unitless"})`,
+  );
   lines.push(`**Provider**: ${session.provider}`);
   lines.push(`**Segment**: ${state.segment} | **Iteration**: ${state.iteration}`);
   lines.push("");

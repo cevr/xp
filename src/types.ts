@@ -28,7 +28,6 @@ export type LifecycleEvent = typeof LifecycleEvent.Type;
 export class Session extends Schema.Class<Session>("Session")(
   Schema.Struct({
     name: Schema.String,
-    metric: Schema.optional(Schema.String),
     unit: Schema.String,
     direction: Direction,
     provider: Provider,
@@ -36,7 +35,7 @@ export class Session extends Schema.Class<Session>("Session")(
     benchmarkCmd: Schema.String,
     maxIterations: Schema.Number,
     maxFailures: Schema.Number,
-    maxWallClockMs: Schema.optional(Schema.Number),
+    deadline: Schema.optional(Schema.String),
     projectRoot: Schema.String,
     segment: Schema.Number,
     currentIteration: Schema.Number,
@@ -57,7 +56,6 @@ export class ConfigEvent extends Schema.Class<ConfigEvent>("ConfigEvent")(
     timestamp: Schema.String,
     segment: Schema.Number,
     name: Schema.String,
-    metric: Schema.String,
     unit: Schema.String,
     direction: Direction,
     provider: Provider,
@@ -83,7 +81,6 @@ export class ResultEvent extends Schema.Class<ResultEvent>("ResultEvent")(
     kind: ResultKind,
     status: ResultStatus,
     value: Schema.optional(Schema.Number),
-    metrics: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
     durationMs: Schema.Number,
     summary: Schema.String,
     provider: Schema.optional(Provider),
@@ -100,7 +97,6 @@ export class DecisionEvent extends Schema.Class<DecisionEvent>("DecisionEvent")(
     iteration: Schema.Number,
     status: Schema.Literals(["kept", "discarded", "failed"]),
     value: Schema.optional(Schema.Number),
-    metrics: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   }),
 ) {}
 
@@ -152,7 +148,7 @@ export class BenchmarkResult extends Schema.Class<BenchmarkResult>("BenchmarkRes
     stderr: Schema.String,
     exitCode: Schema.Number,
     durationMs: Schema.Number,
-    metrics: Schema.Record(Schema.String, Schema.Number),
+    value: Schema.optional(Schema.Number),
   }),
 ) {}
 
